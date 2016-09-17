@@ -35,6 +35,7 @@ class Item(dict, ItemBase):
     attrs_content = []
     set_attributes = True
     content = None
+    url_base = None
 
     def __init__(self, data):
         super(Item, self).__init__()
@@ -46,11 +47,17 @@ class Item(dict, ItemBase):
         self._set_classes_attrs()
         self._set_attrs_content()
         self.set_content()
+        self._set_url()
         self._parse_attributes()
         self.post_init()
 
     def post_init(self):
         pass
+
+    def _set_url(self):
+        if not self.url_base:
+            return
+        self.set_attribute('url', self.url_base.format(**self.to_json()))
 
     def _set_node_attrs(self):
         for key, value in self.data.attrib.items():
@@ -125,11 +132,23 @@ class ItemTitles(Item):
     classes_lists = {Title: 'titles'}
 
 
+class Person(Item):
+    content = 'name'
+    url_base = 'http://www.animenewsnetwork.com/encyclopedia/people.php?id={id}'
+
+
+class Company(Item):
+    content = 'name'
+    url_base = 'http://www.animenewsnetwork.com/encyclopedia/company.php?id={id}'
+
 class TaskItem(Item):
+    tag_classes = {'person': Person, 'company': Company}
+    classes_lists = {Person: 'persons', Company: 'companies'}
     attrs_content = [
         {'name': 'task_name', 'tag': 'task'},
         {'name': 'person_name', 'tag': 'person'},
         {'name': 'company_name', 'tag': 'company'},
+        {'name': 'role_name', 'tag': 'role'},
     ]
 
 
@@ -176,6 +195,12 @@ class AlternativeTitle(Item):
 
 class Genre(Item):
     content = 'name'
+    url_base = 'http://www.animenewsnetwork.com/encyclopedia/search/genreresults?g={name}&o=rating'
+
+
+class Theme(Item):
+    content = 'name'
+    url_base = 'http://www.animenewsnetwork.com/encyclopedia/search/genreresults?g={name}&o=rating'
 
 
 class OfficialWebsite(Item):
@@ -183,7 +208,14 @@ class OfficialWebsite(Item):
 
 
 class Rating(Item):
-    pass
+    def _parse_nb_votes(self):
+        return int(self.get('nb_votes', 0))
+
+    def _parse_bayesian_score(self):
+        return float(self.get('bayesian_score', 0))
+
+    def _parse_weighted_score(self):
+        return float(self.get('weighted_score', 0))
 
 
 class Img(Item):
@@ -210,6 +242,7 @@ class Manganime(Item):
         (('info', {'type': 'Alternative title'}), AlternativeTitle),
         (('info', {'type': 'Main title'}), MainTitle),
         (('info', {'type': 'Genres'}), Genre),
+        (('info', {'type': 'Themes'}), Theme),
         (('info', {'type': 'Official website'}), OfficialWebsite),
         (('info', {'type': 'Picture'}), Pictures),
     ]
@@ -223,7 +256,7 @@ class Manganime(Item):
     classes_lists = {
         News: 'news', Staff: 'staff', Episode: 'episodes', Credit: 'credits', Cast: 'cast',
         Opening: 'openings', Release: 'releases', AlternativeTitle: 'alternative_titles',
-        Genre: 'genres'
+        Genre: 'genres', Theme: 'themes',
     }
     classes_attrs = {MainTitle: 'main_title', Rating: 'rating', Pictures: 'pictures'}
 
@@ -235,11 +268,11 @@ class Manganime(Item):
 
 
 class Anime(Manganime):
-    pass
+    url_base = 'http://www.animenewsnetwork.com/encyclopedia/anime.php?id={id}'
 
 
 class Manga(Manganime):
-    pass
+    url_base = 'http://www.animenewsnetwork.com/encyclopedia/manga.php?id={id}'
 
 
 class Results(list, ItemBase):

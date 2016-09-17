@@ -25,6 +25,7 @@ makedirs(TITLES_CACHE_DIR, exist_ok=True)
 
 
 def get_title_cache_path(name, ext='json'):
+    name = str(name)
     return os.path.join(TITLES_CACHE_DIR, '.'.join([name, ext]))
 
 

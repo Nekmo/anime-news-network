@@ -9,7 +9,7 @@ import six
 CACHE_DIR = os.path.expanduser('~/.local/cache')
 WORDS_CACHE_DIR = os.path.join(CACHE_DIR, 'words')
 TITLES_CACHE_DIR = os.path.join(CACHE_DIR, 'titles')
-WORDS_CSV_FIELDS = ['name', 'titles', 'updated_at']
+WORDS_CSV_FIELDS = ['name', 'label', 'titles', 'updated_at']
 WORDS_CSV_DIALECT = 'excel-tab'
 
 def makedirs(path, mode=0o777, exist_ok=False):
@@ -41,6 +41,7 @@ def save_title_cache(data, name, ext='json'):
 
 
 def load_title_cache(name, ext='json'):
+    name = str(name)
     file = get_title_cache_path(name, ext)
     if not os.path.lexists(file):
         return
@@ -58,16 +59,16 @@ def _save_word_cache(path, lines):
     pass
 
 
-def _create_word_cache_line(name, titles):
-    return {'name': name, 'titles': titles, 'updated_at': datetime.datetime.now().isoformat()}
+def _create_word_cache_line(name, label, titles):
+    return {'name': name, 'label': label, 'titles': titles, 'updated_at': datetime.datetime.now().isoformat()}
 
 
-def save_word_cache(name, titles):
+def save_word_cache(name, label, titles):
     path = get_word_cache_path(name)
     lines = list(_get_csv_reader(name)) if os.path.lexists(path) else []
-    new_line = _create_word_cache_line(name, titles)
+    new_line = _create_word_cache_line(name, label, titles)
     for i, line in enumerate(lines):
-        if not line['name'] == name:
+        if not line['name'] == name and line['label'] == label:
             continue
         lines[i] = new_line
         return _save_word_cache(path, lines)

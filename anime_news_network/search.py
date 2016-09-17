@@ -45,7 +45,7 @@ def search(query, label='title'):
     results = _search_cache(query, label)
     if results is None:
         results = _search_request(query, label)
-    print(results.to_json())
+    return results
 
 
 def _search_request(query, label):

@@ -15,6 +15,7 @@ last_search = 0
 
 def search(query, type='title'):
     from anime_news_network.results import Results
+    is_id = isinstance(query, int)
     wait_to = searchs[-1] if searchs else None
     my_event = Event()
     searchs.append(my_event)
@@ -22,7 +23,7 @@ def search(query, type='title'):
         wait_to[-1].wait(THREAD_TIMEOUT)
     if last_search and time.time() - last_search < DELAY:
         time.sleep(max(DELAY - time.time() - last_search, 0))
-    query = {type: str(query) if isinstance(query, int) else '~{}'.format(query)}
+    query = {type: str(query) if is_id else '~{}'.format(query)}
     data = requests.get(URL, query)
     my_event.set()
     print(Results(data.text).to_json())

@@ -1,6 +1,7 @@
-
-
+import six
 from lxml import etree
+
+from anime_news_network.cache import save_title_cache
 
 
 class ItemBase(object):
@@ -45,7 +46,6 @@ class Item(dict, ItemBase):
             attr = self.classes_lists[item.__class__]
             if not self.has_attribute(attr):
                 self.set_attribute(attr, [])
-            print(self.has_attribute(attr), self)
             self[attr].append(item)
 
     def to_json(self):
@@ -68,6 +68,9 @@ class Manganime(Item):
     classes = {'news': News, 'staff': Staff, 'episode': Episode}
     classes_lists = {News: 'news', Staff: 'staff', Episode: 'episodes'}
 
+    def save_cache(self):
+        save_title_cache(self.data, self['id'], 'xml')
+
 
 class Anime(Manganime):
     pass
@@ -82,8 +85,13 @@ class Results(list, ItemBase):
 
     def __init__(self, data):
         super(Results, self).__init__()
-        data = etree.fromstring(data)
+        if isinstance(data, six.string_types):
+            data = etree.fromstring(data)
         self.extend(self.parse_items(data))
 
     def to_json(self):
         return [obj.to_json() for obj in self]
+
+    def save_cache(self):
+        for item in self:
+            item.save_cache()

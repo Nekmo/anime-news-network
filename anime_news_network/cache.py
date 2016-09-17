@@ -5,6 +5,7 @@ import os
 
 import json
 import six
+from lxml import etree
 
 CACHE_DIR = os.path.expanduser('~/.local/cache')
 WORDS_CACHE_DIR = os.path.join(CACHE_DIR, 'words')
@@ -28,14 +29,17 @@ def get_title_cache_path(name, ext='json'):
 
 
 def get_word_cache_path(name):
-    hash = hashlib.md5(name).hexdigest()[:2]
-    return os.path.join(WORDS_CACHE_DIR, '{}.csv'.join(hash))
+    hash = hashlib.md5(name.encode('utf-8')).hexdigest()[:2]
+    return os.path.join(WORDS_CACHE_DIR, '{}.csv'.format(hash))
 
 
 def save_title_cache(data, name, ext='json'):
     file = get_title_cache_path(name, ext)
     if not isinstance(data, six.string_types) and ext == 'json':
         data = json.dumps(data)
+    elif not isinstance(data, six.string_types) and ext == 'xml':
+        data = etree.tostring(data)
+        data = data.decode('utf-8')
     with open(file, 'w') as f:
         f.write(data)
 
@@ -47,16 +51,21 @@ def load_title_cache(name, ext='json'):
         return
     if ext == 'json':
         return json.load(open(file))
+    elif ext == 'xml':
+        return etree.fromstring(open(file).read())
     else:
         return open(file).read()
 
 
 def _get_csv_reader(name):
-    return csv.DictReader(get_word_cache_path(name), fieldnames=WORDS_CSV_FIELDS, dialect=WORDS_CSV_DIALECT)
+    return csv.DictReader(open(get_word_cache_path(name)), fieldnames=WORDS_CSV_FIELDS, dialect=WORDS_CSV_DIALECT)
 
 
 def _save_word_cache(path, lines):
-    pass
+    f = open(path, 'w')
+    d = csv.DictWriter(f, fieldnames=WORDS_CSV_FIELDS, dialect=WORDS_CSV_DIALECT)
+    d.writerows(lines)
+    f.close()
 
 
 def _create_word_cache_line(name, label, titles):
@@ -64,6 +73,7 @@ def _create_word_cache_line(name, label, titles):
 
 
 def save_word_cache(name, label, titles):
+    titles = ','.join([str(title) for title in titles])
     path = get_word_cache_path(name)
     lines = list(_get_csv_reader(name)) if os.path.lexists(path) else []
     new_line = _create_word_cache_line(name, label, titles)
@@ -74,3 +84,11 @@ def save_word_cache(name, label, titles):
         return _save_word_cache(path, lines)
     lines.append(new_line)
     _save_word_cache(path, lines)
+
+
+def load_word_cache(name, label):
+    path = get_word_cache_path(name)
+    lines = list(_get_csv_reader(name)) if os.path.lexists(path) else []
+    for line in lines:
+        if line['name'] == name and line['label'] == label:
+            return line['titles']

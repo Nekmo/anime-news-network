@@ -31,7 +31,7 @@ def _search_cache(query, type):
     if is_id(query):
         results = [results]
     else:
-        results = [int(x) for x in results.split(',')]
+        results = [int(x) for x in results.split(',') if x]
         results = [load_title_cache(result, ext='xml') for result in results]
     ann = etree.Element('ann')
     for result in results:

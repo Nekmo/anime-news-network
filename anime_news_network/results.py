@@ -352,6 +352,9 @@ class Results(list, ItemBase):
             self.extend(data)
         else:
             self.extend(self.parse_items(data))
+        for item in self:
+            if not isinstance(item, Manganime):
+                self.remove(item)
 
     def to_json(self):
         return [obj.to_json() for obj in self]

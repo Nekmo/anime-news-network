@@ -4,6 +4,7 @@ import sys
 import json
 
 from anime_news_network.search import search
+from anime_news_network.utils import json_serial
 
 if __name__ == '__main__':
-    print(json.dumps(search(' '.join(sys.argv[1:])).to_json(), indent=4))
+    print(json.dumps(search(' '.join(sys.argv[1:])).to_json(), indent=4, default=json_serial))

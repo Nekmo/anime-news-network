@@ -1,7 +1,13 @@
+import datetime
+import re
+
+import dateutil
+import dateutil.parser
 import six
 from lxml import etree
 
 from anime_news_network.cache import save_title_cache
+from anime_news_network.utils import parse_date, safe_compare
 
 
 def match_dict(target, match):
@@ -114,10 +120,23 @@ class Item(dict, ItemBase):
                 self.set_attribute(obj['name'], obj['function'](element.text) if 'function' in obj else element.text)
 
     def _parse_id(self, attr='id'):
-        return int(self[attr]) if attr in self else None
+        try:
+            return int(self[attr]) if attr in self else None
+        except ValueError:
+            return float(self[attr]) if attr in self else None
 
     def _parse_gid(self):
         return self._parse_id('gid')
+
+    def _parse_date(self):
+        date = self.get('date')
+        return parse_date(date) if date else None
+
+    def _parse_datetime(self):
+        dt = self.get('datetime')
+        if not dt:
+            return
+        return dateutil.parser.parse(dt)
 
     def to_json(self):
         return self
@@ -143,7 +162,7 @@ class Company(Item):
 
 class TaskItem(Item):
     tag_classes = {'person': Person, 'company': Company}
-    classes_lists = {Person: 'persons', Company: 'companies'}
+    classes_lists = {Person: 'people', Company: 'companies'}
     attrs_content = [
         {'name': 'task_name', 'tag': 'task'},
         {'name': 'person_name', 'tag': 'person'},
@@ -218,12 +237,22 @@ class Rating(Item):
         return float(self.get('weighted_score', 0))
 
 
+class PremiereDate(Item):
+    content = 'description'
+
+    def post_init(self):
+        description = self.get('description')
+        if description and ' ' in description:
+            date, market = description.split(' ', 1)
+            self.set_attribute('market', market[1:][:-1])
+            self.set_attribute('date', parse_date(date))
+
+
 class Img(Item):
     pass
 
 
 class Pictures(list, ItemBase):
-
     def __init__(self, data):
         super(Pictures, self).__init__()
         self.data = data
@@ -231,11 +260,30 @@ class Pictures(list, ItemBase):
             self.append(Img(img))
 
 
+class RelatedPrev(Item):
+    pass
+
+
+class RelatedNext(Item):
+    pass
+
+
+class Vintage(Item):
+    content = 'description'
+
+    def post_init(self):
+        dates = re.findall('[0-9]{4}\-[0-9]{2}\-[0-9]{2}', self['description'])
+        serialized = re.findall('serialized in (.+?)\)', self['description'])
+        self.set_attribute('release_date', dates[0]) if len(dates) > 0 else None
+        self.set_attribute('completed_date', dates[1]) if len(dates) > 1 else None
+        self.set_attribute('serialized', serialized[0]) if len(serialized) > 0 else None
+
+
 class Manganime(Item):
     # xml element tag: class
     tag_classes = {
         'news': News, 'staff': Staff, 'episode': Episode, 'credit': Credit, 'cast': Cast, 'release': Release,
-        'ratings': Rating,
+        'ratings': Rating, 'related-prev': RelatedPrev
     }
     tag_attr_classes = [
         (('info', {'type': 'Opening Theme'}), Opening),
@@ -245,23 +293,41 @@ class Manganime(Item):
         (('info', {'type': 'Themes'}), Theme),
         (('info', {'type': 'Official website'}), OfficialWebsite),
         (('info', {'type': 'Picture'}), Pictures),
+        (('info', {'type': 'Premiere date'}), PremiereDate),
+        (('info', {'type': 'Vintage'}), Vintage),
     ]
     attrs_content = [
         {'name': 'number_of_episodes', 'tag': 'info', 'attrs': {'type': 'Number of episodes'}, 'function': int},
         {'name': 'plot_summary', 'tag': 'info', 'attrs': {'type': 'Plot Summary'}},
-        {'name': 'vintage', 'tag': 'info', 'attrs': {'type': 'Vintage'}},
+        {'name': 'objectionable_content', 'tag': 'info', 'attrs': {'type': 'Objectionable content'}},
     ]
 
     # class: attribute list
     classes_lists = {
         News: 'news', Staff: 'staff', Episode: 'episodes', Credit: 'credits', Cast: 'cast',
         Opening: 'openings', Release: 'releases', AlternativeTitle: 'alternative_titles',
-        Genre: 'genres', Theme: 'themes',
+        Genre: 'genres', Theme: 'themes', PremiereDate: 'vintages', Vintage: 'vintages',
     }
-    classes_attrs = {MainTitle: 'main_title', Rating: 'rating', Pictures: 'pictures'}
+    classes_attrs = {
+        MainTitle: 'main_title', Rating: 'rating', Pictures: 'pictures', RelatedPrev: 'related_prev',
+        RelatedNext: 'related_next'
+    }
+
+    def _related(self, name):
+        obj = self.get('related_{}'.format(name))
+        if obj is not None:
+            from anime_news_network.search import search
+            return search(obj.id)[0]
+
+    def next(self):
+        return self._related('next')
+
+    def prev(self):
+        return self._related('prev')
 
     def post_init(self):
-        pass
+        if self.get('vintages') and 'release_date' in self['vintages'][0]:
+            self.set_attribute('release_date', self['vintages'][0]['release_date'])
 
     def save_cache(self):
         save_title_cache(self.data, self['id'], 'xml')
@@ -282,7 +348,10 @@ class Results(list, ItemBase):
         super(Results, self).__init__()
         if isinstance(data, six.string_types):
             data = etree.fromstring(data)
-        self.extend(self.parse_items(data))
+        if isinstance(data, list):
+            self.extend(data)
+        else:
+            self.extend(self.parse_items(data))
 
     def to_json(self):
         return [obj.to_json() for obj in self]
@@ -290,3 +359,6 @@ class Results(list, ItemBase):
     def save_cache(self):
         for item in self:
             item.save_cache()
+
+    def sort_by(self, key):
+        return Results(sorted([x for x in self], key=safe_compare(lambda x: x.get(key))))
